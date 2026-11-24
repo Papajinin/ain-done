@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- 홈 화면 앱: 아이폰은 apple-touch-icon, 안드로이드는 manifest.json. 아이콘 이름은 AIN Done -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="AIN Done">
+  <meta name="theme-color" content="#F2F2F7">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
+  <link rel="icon" type="image/png" href="apple-touch-icon.png?v=1">
+  <title>AIN Done</title>
+  <script>
+    // 저장된 화면 모드와 테마 색을 먼저 적용해서 색이 깜빡이지 않게
+    try {
+      const s = JSON.parse(localStorage.getItem('ainDone')).settings;
+      if (s.theme === 'light' || s.theme === 'dark') document.documentElement.setAttribute('data-theme', s.theme);
+      if (s.accent === 'green' || s.accent === 'red' || s.accent === 'yellow') document.documentElement.setAttribute('data-accent', s.accent);
+    } catch (e) {}
+  </script>
+  <script>
+    // 새 버전 스스로 받기 (AIN 앱 공통): 켤 때 서버의 version.txt 숫자가 아래 APP_VERSION보다 크면
+    // 새 화면 파일을 받아 한 번 새로고침. 올릴 때마다 두 숫자를 같이 올린다
+    const APP_VERSION = 1;
+    (function () {
+      const t0 = Date.now();
+      const key = 'ainDone.updated'; // 같은 버전으로 두 번 새로고침하지 않게
+      fetch('version.txt?t=' + t0, { cache: 'no-store' })
+        .then(r => r.ok ? r.text() : '')
+        .then(txt => {
+          const v = parseInt(txt, 10);
+          if (!(v > APP_VERSION) || Date.now() - t0 > 4000) return; // 이미 쓰기 시작했으면 다음에 켤 때
+          try { if (sessionStorage.getItem(key) === String(v)) return; sessionStorage.setItem(key, String(v)); } catch (e) { return; }
+          return Promise.all([fetch(location.pathname, { cache: 'reload' }), fetch('index.html', { cache: 'reload' })])
+            .then(() => { if (Date.now() - t0 < 6000) location.reload(); });
+        })
+        .catch(() => {}); // 인터넷이 안 되면 그냥 염
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+  <!-- 시작 화면 (앱을 새로 열 때만, 약 1.6초): 파란 원이 펼쳐지고 → 돌이 아래부터 하나씩 톡톡 쌓임 → 이름 (AIN 앱 공통 순서) -->
+  <div class="splash" id="splash" aria-hidden="true">
+    <div class="splash-mark">
+      <div class="splash-disc">
+        <svg viewBox="0 0 64 64"><circle class="splash-bg" cx="32" cy="32" r="32"/><ellipse class="splash-stamp" cx="32" cy="45" rx="14.5" ry="5.6" style="animation-delay:0.55s"/><ellipse class="splash-stamp" cx="32" cy="33.2" rx="10.5" ry="5" style="animation-delay:0.70s"/><ellipse class="splash-stamp" cx="32" cy="22.6" rx="6.6" ry="4.4" style="animation-delay:0.85s"/></svg>
+      </div>
+      <div class="wordmark splash-word"><b>AIN</b> Done</div>
+    </div>
+  </div>
+
+  <!-- 화면 (오늘 / 돌아보기 / 찾기): 그때그때 그림 -->
+  <div class="app" id="app"></div>
+
+  <!-- 날짜 고르기 창 (오늘 화면의 날짜를 누르면) -->
+  <div class="overlay" id="dateOverlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="dateTitle">
+      <div class="sheet-top">
+        <span></span>
+        <h2 id="dateTitle">날짜 고르기</h2>
+        <button class="sheet-btn strong" id="dateClose" type="button">닫기</button>
+      </div>
+      <div class="sheet-scroll">
+        <div class="cal in-sheet" id="dateCal"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 한 일 창 (목록의 줄을 누르면): 분류 고르기, 지우기 -->
+  <div class="overlay" id="itemOverlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="itemTitle">
+      <div class="sheet-top">
+        <button class="sheet-btn" id="itemCancel" type="button">취소</button>
+        <h2 id="itemTitle">한 일</h2>
+        <button class="sheet-btn strong" id="itemSave" type="button">완료</button>
+      </div>
+      <div class="sheet-scroll">
+        <div class="group"><p class="item-name" id="itemName"></p></div>
+        <div class="group-label">분류</div>
+        <div class="group picks" id="itemCats"></div>
+        <p class="hint">분류는 설정에서 만들어요. 다음에 같은 일을 적으면 이 분류로 들어가요.</p>
+        <div class="group"><button class="row danger" id="itemDelete" type="button">지우기</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 설정 창 -->
+  <div class="overlay" id="settingsOverlay" hidden>
+    <div class="sheet tall" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="sheet-top">
+        <span></span>
+        <h2 id="settingsTitle">설정</h2>
+        <button class="sheet-btn strong" id="settingsClose" type="button">완료</button>
+      </div>
+      <div class="sheet-scroll">
+        <div class="group-label">화면 모드</div>
+        <div class="group"><div class="row"><div class="seg wide grow" id="sTheme">
+          <button type="button" data-v="light">라이트</button>
+          <button type="button" data-v="dark">다크</button>
+          <button type="button" data-v="auto">자동</button>
+        </div></div></div>
+
+        <div class="group-label">테마 색</div>
+        <div class="group"><div class="row"><div class="seg wide grow" id="sAccent">
+          <button type="button" data-v="blue"><i class="sw" style="background:#0071E3"></i>블루</button>
+          <button type="button" data-v="green"><i class="sw" style="background:#00B74F"></i>그린</button>
+          <button type="button" data-v="red"><i class="sw" style="background:#D31E3D"></i>레드</button>
+          <button type="button" data-v="yellow"><i class="sw" style="background:#FFCC00"></i>옐로</button>
+        </div></div></div>
+        <p class="hint">버튼과 강조 색이 바뀌어요. 이 계정의 모든 기기에 같이 적용돼요.</p>
+
+        <div class="group-label">한 주의 시작</div>
+        <div class="group"><div class="row"><div class="seg wide grow" id="sWeek">
+          <button type="button" data-v="0">일요일</button>
+          <button type="button" data-v="1">월요일</button>
+        </div></div></div>
+        <p class="hint">주간 돌아보기와 달력에 적용돼요.</p>
+
+        <div class="group-label">분류</div>
+        <div class="group" id="sCats"></div>
+        <p class="hint">돌아보기에서 분류별로 모아 보여요. 이 순서대로 나오고, 꾹 눌러서 순서를 바꿔요.</p>
+
+        <div class="group-label">잠금</div>
+        <div class="group"><div class="row"><div class="seg wide grow" id="sLockSeg">
+          <button type="button" data-v="off">끄기</button>
+          <button type="button" data-v="on">켜기</button>
+        </div></div></div>
+        <p class="hint" id="lockHint">켜면 앱을 열 때, 그리고 1분 넘게 내려 두었다 돌아올 때 Face ID·지문을 물어봐요. 이 기기에만 적용돼요. 켤 때 아이폰이 패스키 저장을 물으면 지문이나 얼굴로 확인해 주세요.</p>
+
+        <div id="sAccount">
+          <div class="group-label">계정</div>
+          <div class="group">
+            <div class="row"><span>로그인</span><span class="row-value" id="accountEmail"></span></div>
+            <button class="row danger" id="logoutBtn" type="button">로그아웃</button>
+          </div>
+        </div>
+        <p class="hint" id="localNote" hidden>아직 클라우드에 연결하기 전이라 기록이 이 기기에만 저장돼요.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 분류 추가·고치기 창 -->
+  <div class="overlay" id="catOverlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cTitle">
+      <div class="sheet-top">
+        <button class="sheet-btn" id="cCancel" type="button">취소</button>
+        <h2 id="cTitle">분류 추가</h2>
+        <button class="sheet-btn strong" id="cSave" type="button">추가</button>
+      </div>
+      <div class="sheet-scroll">
+        <div class="group">
+          <label class="in-row"><span>이름</span><input id="cName" type="text" maxlength="12" placeholder="예: 가족" autocomplete="off" enterkeyhint="done"></label>
+        </div>
+        <div class="group-label">색</div>
+        <div class="group colors" id="cColors"></div>
+        <p class="hint">다른 분류가 쓰는 색은 흐리게 나와요.</p>
+        <div id="cEditOnly">
+          <div class="group"><button class="row danger" id="cDelete" type="button">분류 지우기</button></div>
+          <p class="hint">지워도 기록은 남고, "분류 없음"으로 옮겨져요.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 로그인 화면 -->
+  <div class="login" id="login" hidden>
+    <div class="login-box">
+      <h1 class="wordmark big"><b>AIN</b> Done</h1>
+      <p class="login-sub">가족 계정으로 로그인해 주세요</p>
+      <button class="add-btn" id="loginBtn" type="button">Google로 로그인</button>
+      <p class="f-error login-error" id="loginError" hidden></p>
+    </div>
+  </div>
+
+  <!-- 잠금 화면 (Face ID·지문) -->
+  <div class="login lock-screen" id="appLock" hidden>
+    <div class="login-box">
+      <div class="lock-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+      <h1 class="wordmark big"><b>AIN</b> Done</h1>
+      <p class="login-sub">잠겨 있어요</p>
+      <p class="f-error login-error" id="lockError" hidden>확인하지 못했어요. 다시 눌러 주세요.</p>
+      <button class="add-btn" id="unlockBtn" type="button">잠금 풀기</button>
+      <button class="text-btn" id="lockRelogin" type="button">구글 로그인 다시 하기</button>
+    </div>
+  </div>
+
+  <!-- 선택 창 (지우기·로그아웃 확인) -->
+  <div class="overlay" id="actionOverlay" hidden>
+    <div class="action-sheet">
+      <div class="action-group">
+        <p class="action-msg" id="actionMsg"></p>
+        <div id="actionBtns"></div>
+      </div>
+      <button class="action-cancel" id="actionCancel" type="button">취소</button>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://papajinin.github.io/ain-todo/holidays.js"></script>
+  <script src="app.js?v=1"></script>
+  <script src="today.js?v=1"></script>
+  <script src="recall.js?v=1"></script>
+  <script src="sheet.js?v=1"></script>
+  <script src="settings.js?v=1"></script>
+  <script src="sync.js?v=1"></script>
+  <script src="lock.js?v=1"></script>
+  <script src="main.js?v=1"></script>
+</body>
+</html>
