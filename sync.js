@@ -7,14 +7,13 @@
 //  - 아래 설정값이 비어 있으면 로그인 없이 이 기기에만 저장 (클라우드 연결 전 확인용)
 
 // Firebase 관리 화면 → 프로젝트 설정 → 내 앱(웹)에서 복사해 넣는 값
-// (비어 있으면 로그인 없이 이 기기에만 저장. Firebase 프로젝트 ain-done을 만든 뒤 채움)
 const FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: ''
+  apiKey: 'AIzaSyDgYPZeVK64lRDe36JXE9zfQXapQA24fW0',
+  authDomain: 'ain-done.firebaseapp.com',
+  projectId: 'ain-done',
+  storageBucket: 'ain-done.firebasestorage.app',
+  messagingSenderId: '778695043200',
+  appId: '1:778695043200:web:62589e39577b4ad006de65'
 };
 
 const UID_KEY = 'ainDone.uid';          // 이 기기에 마지막으로 로그인한 사람
